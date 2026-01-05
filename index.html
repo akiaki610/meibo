@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>運転会出席名簿</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 500px;
+      margin: 40px auto;
+    }
+    li {
+      margin: 8px 0;
+      display: flex;
+      align-items: center;
+    }
+    li span {
+      flex: 1;
+      margin-left: 8px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 8px 12px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>運転会出席名簿</h1>
+<p id="count">出席：0人</p>
+
+<ul id="list"></ul>
+
+<input id="nameInput" type="text" placeholder="参加者名を入力">
+<button onclick="add()">追加</button>
+<button onclick="share()">共有URLを作成</button>
+
+<script>
+  const list = document.getElementById("list");
+  const count = document.getElementById("count");
+
+  if (location.hash) {
+    const data = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+    data.forEach(p => create(p.name, p.present));
+    updateCount();
+  }
+
+  function create(name, present=false) {
+    const li = document.createElement("li");
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = present;
+    checkbox.onchange = updateCount;
+
+    const span = document.createElement("span");
+    span.textContent = name;
+
+    li.appendChild(checkbox);
+    li.appendChild(span);
+    list.appendChild(li);
+  }
+
+  function add() {
+    const input = document.getElementById("nameInput");
+    if (!input.value) return;
+    create(input.value);
+    input.value = "";
+    updateCount();
+  }
+
+  function updateCount() {
+    const present = [...list.querySelectorAll("input")].filter(c => c.checked).length;
+    count.textContent = `出席：${present}人`;
+  }
+
+  function share() {
+    const data = [];
+    list.querySelectorAll("li").forEach(li => {
+      data.push({
+        name: li.querySelector("span").textContent,
+        present: li.querySelector("input").checked
+      });
+    });
+    location.hash = encodeURIComponent(JSON.stringify(data));
+    navigator.clipboard.writeText(location.href);
+    alert("出席名簿のURLをコピーしました");
+  }
+</script>
+
+</body>
+</html>
