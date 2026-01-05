@@ -1,96 +1,213 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>運転会出席名簿</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      max-width: 500px;
-      margin: 40px auto;
-    }
-    li {
-      margin: 8px 0;
-      display: flex;
-      align-items: center;
-    }
-    li span {
-      flex: 1;
-      margin-left: 8px;
-    }
-    button {
-      margin-top: 10px;
-      padding: 8px 12px;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 6px;
-      margin-bottom: 10px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>出席名簿（管理用）</title>
+
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  background: #f2f2f2;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  padding: 14px;
+  border-bottom: 1px solid #ccc;
+  z-index: 10;
+}
+
+h1 { margin: 0 0 8px; font-size: 18px; }
+
+.stats {
+  display: flex;
+  gap: 12px;
+  font-weight: bold;
+}
+
+main { padding: 12px; }
+
+input, button {
+  font-size: 16px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+}
+
+button {
+  background: #1976d2;
+  color: #fff;
+  border: none;
+}
+
+button.sub { background: #555; }
+button.danger { background: #c62828; }
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  margin-bottom: 8px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.person span {
+  flex: 1;
+  margin-left: 10px;
+  font-size: 16px;
+}
+
+.person small {
+  color: #666;
+  font-size: 12px;
+}
+
+.person input {
+  width: 26px;
+  height: 26px;
+}
+
+.hidden { display: none; }
+</style>
 </head>
+
 <body>
 
-<h1>運転会出席名簿</h1>
-<p id="count">出席：0人</p>
+<header>
+  <h1>出席名簿（主催者用）</h1>
+  <div class="stats">
+    <div id="total">合計: 0</div>
+    <div id="present">出席: 0</div>
+    <div id="absent">欠席: 0</div>
+  </div>
+</header>
 
-<ul id="list"></ul>
+<main>
+  <div class="row">
+    <input id="search" placeholder="名前検索">
+    <button class="sub" onclick="exportCSV()">CSV</button>
+  </div>
 
-<input id="nameInput" type="text" placeholder="参加者名を入力">
-<button onclick="add()">追加</button>
-<button onclick="share()">共有URLを作成</button>
+  <div class="row">
+    <input id="nameInput" placeholder="参加者追加">
+    <button onclick="add()">追加</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="row">
+    <button class="danger" onclick="resetAll()">全リセット</button>
+    <button class="sub" onclick="share()">共有URL</button>
+  </div>
+</main>
 
 <script>
-  const list = document.getElementById("list");
-  const count = document.getElementById("count");
+const list = document.getElementById("list");
+const search = document.getElementById("search");
 
-  if (location.hash) {
-    const data = JSON.parse(decodeURIComponent(location.hash.slice(1)));
-    data.forEach(p => create(p.name, p.present));
-    updateCount();
-  }
+if (location.hash) {
+  JSON.parse(decodeURIComponent(location.hash.slice(1)))
+    .forEach(p => create(p.name, p.present, p.time));
+  update();
+}
 
-  function create(name, present=false) {
-    const li = document.createElement("li");
+function create(name, present=false, time=null) {
+  const div = document.createElement("div");
+  div.className = "person";
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = present;
-    checkbox.onchange = updateCount;
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = present;
+  cb.onchange = () => {
+    timeLabel.textContent = cb.checked
+      ? new Date().toLocaleTimeString()
+      : "";
+    update();
+  };
 
-    const span = document.createElement("span");
-    span.textContent = name;
+  const span = document.createElement("span");
+  span.textContent = name;
 
-    li.appendChild(checkbox);
-    li.appendChild(span);
-    list.appendChild(li);
-  }
+  const timeLabel = document.createElement("small");
+  if (time) timeLabel.textContent = time;
 
-  function add() {
-    const input = document.getElementById("nameInput");
-    if (!input.value) return;
-    create(input.value);
-    input.value = "";
-    updateCount();
-  }
+  const del = document.createElement("button");
+  del.textContent = "×";
+  del.className = "danger";
+  del.onclick = () => div.remove();
 
-  function updateCount() {
-    const present = [...list.querySelectorAll("input")].filter(c => c.checked).length;
-    count.textContent = `出席：${present}人`;
-  }
+  div.append(cb, span, timeLabel, del);
+  list.appendChild(div);
+}
 
-  function share() {
-    const data = [];
-    list.querySelectorAll("li").forEach(li => {
-      data.push({
-        name: li.querySelector("span").textContent,
-        present: li.querySelector("input").checked
-      });
-    });
-    location.hash = encodeURIComponent(JSON.stringify(data));
-    navigator.clipboard.writeText(location.href);
-    alert("出席名簿のURLをコピーしました");
-  }
+function add() {
+  const input = document.getElementById("nameInput");
+  if (!input.value) return;
+  create(input.value);
+  input.value = "";
+  update();
+}
+
+function update() {
+  const people = [...list.children];
+  const present = people.filter(p => p.querySelector("input").checked).length;
+
+  document.getElementById("total").textContent = `合計: ${people.length}`;
+  document.getElementById("present").textContent = `出席: ${present}`;
+  document.getElementById("absent").textContent = `欠席: ${people.length - present}`;
+
+  people.forEach(p => {
+    const name = p.querySelector("span").textContent;
+    p.classList.toggle("hidden",
+      !name.includes(search.value)
+    );
+  });
+}
+
+search.oninput = update;
+
+function resetAll() {
+  if (!confirm("全員未出席にしますか？")) return;
+  list.querySelectorAll("input").forEach(c => c.checked = false);
+  list.querySelectorAll("small").forEach(s => s.textContent = "");
+  update();
+}
+
+function share() {
+  const data = [...list.children].map(p => ({
+    name: p.querySelector("span").textContent,
+    present: p.querySelector("input").checked,
+    time: p.querySelector("small").textContent
+  }));
+  location.hash = encodeURIComponent(JSON.stringify(data));
+  navigator.clipboard.writeText(location.href);
+  alert("共有URLをコピーしました");
+}
+
+function exportCSV() {
+  let csv = "名前,出席,時刻\n";
+  [...list.children].forEach(p => {
+    csv += `${p.querySelector("span").textContent},`
+         + `${p.querySelector("input").checked ? "出席" : "欠席"},`
+         + `${p.querySelector("small").textContent}\n`;
+  });
+  const blob = new Blob([csv], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "attendance.csv";
+  a.click();
+}
 </script>
 
 </body>
