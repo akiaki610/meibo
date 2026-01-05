@@ -5,208 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>運転会出席名簿</title>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
 body {
   font-family: system-ui, sans-serif;
   margin: 0;
   background: #f2f2f2;
 }
-
 header {
   position: sticky;
   top: 0;
-  background: #fff;
+  background: #ffffff;
   padding: 14px;
   border-bottom: 1px solid #ccc;
   z-index: 10;
 }
-
-h1 { margin: 0 0 8px; font-size: 18px; }
-
-.stats {
-  display: flex;
-  gap: 12px;
+h1 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+#count {
   font-weight: bold;
 }
-
-main { padding: 12px; }
-
-input, button {
+main {
+  padding: 12px;
+}
+.add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.add input {
+  flex: 1;
+  padding: 12px;
   font-size: 16px;
-  padding: 10px;
   border-radius: 10px;
   border: 1px solid #ccc;
 }
-
-button {
+.add button {
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 10px;
+  border: none;
   background: #1976d2;
   color: #fff;
-  border: none;
 }
-
-button.sub { background: #555; }
-button.danger { background: #c62828; }
-
-.row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
 .person {
   display: flex;
   align-items: center;
   background: #fff;
   margin-bottom: 8px;
-  padding: 12px;
+  padding: 10px;
   border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
-
-.person span {
-  flex: 1;
-  margin-left: 10px;
-  font-size: 16px;
-}
-
-.person small {
-  color: #666;
-  font-size: 12px;
-}
-
-.person input {
+.person input[type="checkbox"] {
   width: 26px;
   height: 26px;
 }
-
-.hidden { display: none; }
+.person input[type="text"] {
+  flex: 1;
+  margin: 0 8px;
+  font-size: 16px;
+  padding: 6px;
+  border: none;
+  border-bottom: 1px solid #ccc;
+}
+.person button {
+  background: #c62828;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+}
 </style>
 </head>
 
 <body>
 
 <header>
-  <h1>運転会出席名簿</h1>
-  <div class="stats">
-    <div id="total">合計: 0</div>
-    <div id="present">出席: 0</div>
-    <div id="absent">欠席: 0</div>
+  <h1>521系運転会出席名簿</h1>
+  <div id="stats">
+    合計：<span id="total">0</span>人 /
+    出席：<span id="present">0</span>人 /
+    欠席：<span id="absent">0</span>人
   </div>
 </header>
 
-<main>
-  <div class="row">
-    <input id="search" placeholder="名前検索">
-    <button class="sub" onclick="exportCSV()">CSV</button>
-  </div>
 
-  <div class="row">
-    <input id="nameInput" placeholder="参加者追加">
-    <button onclick="add()">追加</button>
+<main>
+  <div class="add">
+    <input id="nameInput" placeholder="参加者名を追加">
+    <button onclick="addPerson()">追加</button>
   </div>
 
   <div id="list"></div>
-
-  <div class="row">
-    <button class="danger" onclick="resetAll()">ステータスリセット</button>
-    <button class="sub" onclick="share()">共有URL</button>
-  </div>
 </main>
 
 <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCDAErGXOKmTsL2XIe3xLO_lH1GN-62FgQ",
+  authDomain: "meibo-2d31f.firebaseapp.com",
+  databaseURL: "https://meibo-2d31f-default-rtdb.firebaseio.com",
+  projectId: "meibo-2d31f",
+  storageBucket: "meibo-2d31f.firebasestorage.app",
+  messagingSenderId: "513837039986",
+  appId: "1:513837039986:web:60001fb633a00b368dddeb"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const ref = db.ref("attendance");
+
 const list = document.getElementById("list");
-const search = document.getElementById("search");
+const totalEl = document.getElementById("total");
+const presentEl = document.getElementById("present");
+const absentEl = document.getElementById("absent");
 
-if (location.hash) {
-  JSON.parse(decodeURIComponent(location.hash.slice(1)))
-    .forEach(p => create(p.name, p.present, p.time));
-  update();
-}
 
-function create(name, present=false, time=null) {
-  const div = document.createElement("div");
-  div.className = "person";
+// リアルタイム表示
+ref.on("value", snap => {
+  const data = snap.val() || {};
+  list.innerHTML = "";
 
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.checked = present;
-  cb.onchange = () => {
-    timeLabel.textContent = cb.checked
-      ? new Date().toLocaleTimeString()
-      : "";
-    update();
-  };
+  let total = 0;
+  let present = 0;
 
-  const span = document.createElement("span");
-  span.textContent = name;
+  Object.entries(data).forEach(([id, p]) => {
+    total++;
 
-  const timeLabel = document.createElement("small");
-  if (time) timeLabel.textContent = time;
+    const div = document.createElement("div");
+    div.className = "person";
 
-  const del = document.createElement("button");
-  del.textContent = "×";
-  del.className = "danger";
-  del.onclick = () => div.remove();
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = p.present || false;
+    cb.onchange = () => {
+      ref.child(id).update({ present: cb.checked });
+    };
 
-  div.append(cb, span, timeLabel, del);
-  list.appendChild(div);
-}
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = p.name;
+    nameInput.onchange = () => {
+      ref.child(id).update({ name: nameInput.value });
+    };
 
-function add() {
+    const del = document.createElement("button");
+    del.textContent = "削除";
+    del.onclick = () => {
+      if (confirm("この参加者を削除しますか？")) {
+        ref.child(id).remove();
+      }
+    };
+
+    if (cb.checked) present++;
+
+    div.append(cb, nameInput, del);
+    list.appendChild(div);
+  });
+
+  const absent = total - present;
+
+  totalEl.textContent = total;
+  presentEl.textContent = present;
+  absentEl.textContent = absent;
+});
+
+
+// 参加者追加
+function addPerson() {
   const input = document.getElementById("nameInput");
   if (!input.value) return;
-  create(input.value);
+  ref.push({
+    name: input.value,
+    present: false
+  });
   input.value = "";
-  update();
-}
-
-function update() {
-  const people = [...list.children];
-  const present = people.filter(p => p.querySelector("input").checked).length;
-
-  document.getElementById("total").textContent = `合計: ${people.length}`;
-  document.getElementById("present").textContent = `出席: ${present}`;
-  document.getElementById("absent").textContent = `欠席: ${people.length - present}`;
-
-  people.forEach(p => {
-    const name = p.querySelector("span").textContent;
-    p.classList.toggle("hidden",
-      !name.includes(search.value)
-    );
-  });
-}
-
-search.oninput = update;
-
-function resetAll() {
-  if (!confirm("全員未出席にしますか？")) return;
-  list.querySelectorAll("input").forEach(c => c.checked = false);
-  list.querySelectorAll("small").forEach(s => s.textContent = "");
-  update();
-}
-
-function share() {
-  const data = [...list.children].map(p => ({
-    name: p.querySelector("span").textContent,
-    present: p.querySelector("input").checked,
-    time: p.querySelector("small").textContent
-  }));
-  location.hash = encodeURIComponent(JSON.stringify(data));
-  navigator.clipboard.writeText(location.href);
-  alert("共有URLをコピーしました");
-}
-
-function exportCSV() {
-  let csv = "名前,出席,時刻\n";
-  [...list.children].forEach(p => {
-    csv += `${p.querySelector("span").textContent},`
-         + `${p.querySelector("input").checked ? "出席" : "欠席"},`
-         + `${p.querySelector("small").textContent}\n`;
-  });
-  const blob = new Blob([csv], {type:"text/csv"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "attendance.csv";
-  a.click();
 }
 </script>
 
